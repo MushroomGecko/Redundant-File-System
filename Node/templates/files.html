@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<form method="post" action="/files" enctype="multipart/form-data">
+	<input type ="file" value="File" name="filesup" multiple />
+	<input type="submit" value="Upload" name="upload_button">
+</form>
+<form method="post" action="/files" enctype="multipart/form-data">
+	<table>
+	{% for i in to_list %}
+		<tr>
+			<td>
+				<input type="checkbox" value={{i}} name="filesdown" multiple> {{i}} </br>
+			</td>
+		</tr>
+	{%endfor%}
+</table>
+<input type="submit" value="Download" name="download_button">
+</form>
+</body>
+</html>
