@@ -25,11 +25,13 @@ def index():
                 print("here")
                 sessionavg = {}
                 for i in nodes:
-                    ping = os.popen("sshpass -p 12345 ssh cmsc621@" + i + " ping -c 3 " + str(session['ip'])).read()
+                    ping = os.popen("sshpass -p 12345 ssh cmsc621@" + i + " ping -c 1 " + str(session['ip'])).read()
                     avg = str(ping.split("rtt")[1]).split()[2].split("/")[1]
                     sessionavg[i] = avg
                 session['node'] = min(zip(sessionavg.values(), sessionavg.keys()))[1]
-                data = [{"username": session['username'], "ip": session['ip']}]
+                sessionavg.pop(session['node'])
+                session['replicas'] = list(sessionavg.keys())
+                data = [{"username": session['username'], "ip": session['ip'], "replicas": session['replicas']}]
                 requests.post('http://' + session['node'] + ':25565', json=data)
                 return redirect('http://' + session['node'] + ':25565')
             return redirect('http://' + session['node'] + ':25565')
