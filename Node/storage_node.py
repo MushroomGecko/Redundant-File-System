@@ -76,10 +76,12 @@ def files_index():
                         "rsync " + app.config['UPLOAD_FOLDER'] + "/" + name + " " + public_files + "/" + name + "/" + name +
                         " && rm -f " + app.config['UPLOAD_FOLDER'] + "/" + name +
                         " && touch " + public_files + "/" + name + "/.version" +
-                        " && echo \"" + session['username'] + "\n" + getip() + "\" > " + public_files + "/" + name + "/.version")
+                        " && echo \"" + session['username'] + "\n" + getip() + "\n1\" > " + public_files + "/" + name + "/.version")
                     for replica in session['replicas']:
-                        os.system("sshpass -p 12345 rsync " + public_files + "/" + name + " cmsc621@" + replica + ":/home/cmsc621/Desktop/" + public_files + "/" + name)
+                        os.system("sshpass -p 12345 rsync -r " + public_files + "/" + name + " cmsc621@" + replica + ":/home/cmsc621/Desktop/" + public_files + "/" + name)
                 else:
+                    versioning = os.popen("cat " + public_files + "/" + name + "/.version").read().split("\n")
+                    os.system("echo \"" + versioning[0] + "\n" + versioning[1] + "\n" + str(int(versioning[2])+1) + "\" > " + public_files + "/" + name + "/.version")
                     versioning = os.popen("cat " + public_files + "/" + name + "/.version").read().split("\n")
                     if versioning[1] != getip():
                         print("not original server")
