@@ -6,6 +6,7 @@ from flask_sock import Sock
 import os
 import subprocess
 import socket
+import threading
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "files/"
@@ -13,11 +14,11 @@ app.config['SECRET_KEY'] = "Your_secret_string"
 app.config['SOCK_SERVER_OPTIONS'] = {'ping_interval': 25}
 sock = Sock(app)
 
-nodes = os.listdir('nodes/')
-
+resultsarray = []
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    nodes = os.listdir('nodes/')
     if 'ip' not in session:
         if request.method == "POST":
             # Get the username and IP of a user connecting
@@ -33,12 +34,14 @@ def index():
                     if x > 5:
                         break
                     ping = os.popen("sshpass -p 12345 ssh cmsc621@" + i + " ping -c 1 " + str(session['ip'])).read()
+                    print(ping)
                     avg = str(ping.split("rtt")[1]).split()[2].split("/")[1]
                     sessionavg[i] = avg
                     x += 1
 
                 if username not in os.listdir('users/'):
-                    os.system("touch users/" + username + " && echo \"" + str(list(sessionavg.keys())) + "\" > users/" + username)
+                    os.system("touch users/" + username + " && echo \"" + str(
+                        list(sessionavg.keys())) + "\" > users/" + username)
                 else:
                     file = open("users/" + username, "r").read()
                     print(file)
@@ -51,7 +54,6 @@ def index():
                 sessionavg.pop(primary)
                 replicas = list(sessionavg.keys())
 
-
                 session['primary'] = primary
                 session['replicas'] = replicas
                 print(session['primary'], session['replicas'])
@@ -62,6 +64,75 @@ def index():
             return redirect('http://' + session['primary'] + ':25565')
         return render_template("index.html")
     return render_template("index.html")
+
+
+@app.route('/resolvedown', methods=['GET', 'POST'])
+def resolvedown():
+    if request.method == 'POST':
+        print("Down request")
+        # Get the post request from the downed server
+        data = request.json
+        # Get IP of downed server
+        downednode = data[1]
+        os.system("rm -f nodes/" + downednode)
+
+        # Store all users with new primary replica in global array (threading can't return values)
+        global resultsarray
+        resultsarray = []
+
+        # Remove downed node from client replica list
+        threadarray = []
+        for user in os.listdir('users'):
+            file = open("users/" + user, "r").read()
+            print(file)
+            rep = list(json.loads(file.replace('\'', '"')))
+            if downednode in rep:
+                rep.remove(downednode)
+                os.system("echo \"" + str(rep) + "\" > users/" + user)
+                print(type(user))
+                threadarray.append(threading.Thread(target=find_new_server, args=(user,)))
+
+        # See who exists in downed node to get ready to transfer user files to new primary servers
+        print("Getting Results...")
+        for thread in threadarray:
+            thread.start()
+            thread.join()
+        print(resultsarray)
+    return render_template("index.html")
+
+
+def find_new_server(user):
+    global resultsarray
+    # Get user data
+    file = open("users/" + user, "r").read()
+    rep = list(json.loads(file.replace('\'', '"')))
+    sessionavg = {}
+
+    # If user does not have any replicas, oh well
+    if not rep:
+        return 0
+
+    # Find lowest ping existing replica for new primary server
+    x = 1
+    for i in rep:
+        # print(i)
+        if x > 5:
+            break
+        ping = os.popen("sshpass -p 12345 ssh cmsc621@" + i + " ping -c 1 " + str(i)).read()
+        # print(ping)
+        avg = str(ping.split("rtt")[1]).split()[2].split("/")[1]
+        sessionavg[i] = avg
+        x += 1
+    primary = min(zip(sessionavg.values(), sessionavg.keys()))[1]
+    sessionavg.pop(primary)
+    replicas = list(sessionavg.keys())
+
+    # If a user is in a session, update session
+    if session:
+        session['primary'] = primary
+        session['replicas'] = replicas
+    # Add user stuff to results array
+    resultsarray.append([user, primary])
 
 
 if __name__ == "__main__":
