@@ -5,6 +5,7 @@ import subprocess
 import socket
 import json
 from werkzeug.utils import secure_filename
+import requests
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "quarantine/"
@@ -35,6 +36,11 @@ def index():
     # Preemptively gets information about a user about to be redirected
     if request.method == 'POST':
         user_data = request.json
+        for i in users:
+            if i['username'] == user_data[0]['username'] or i['ip'] == user_data[0]['ip']:
+                print("here")
+                users.remove(i)
+                break
         users.append(user_data[0])
         print(users)
         return render_template('index.html')
@@ -119,6 +125,16 @@ def files_index():
                 to_list.append(file)
     return render_template('files.html', to_list=to_list, user=session['username'])
 
+
+@app.route('/down', methods=['GET', 'POST'])
+def down():
+    # Placeholder for receiving new primary nodes for users
+    if request.method == 'POST':
+        return 0
+    users.append(getip())
+    data = users
+    # Request users' new primary nodes
+    requests.post('http://' + master + ':25565/resolvedown', json=data)
 
 if __name__ == "__main__":
     # Establish presence in master server's list of nodes
