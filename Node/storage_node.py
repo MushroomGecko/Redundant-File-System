@@ -99,7 +99,7 @@ def files_index():
                         " && touch " + public_files + "/" + name + "/.version" +
                         " && echo \"" + session['username'] + "\n" + getip() + "\n1\" > " + public_files + "/" + name + "/.version")
                     for replica in session['replicas']:
-                        os.system("sshpass -p 12345 rsync -r " + public_files + "/" + name + " cmsc621@" + replica + ":/home/cmsc621/Desktop/" + public_files + "/" + name)
+                        os.system("sshpass -p 12345 rsync -r " + public_files + "/" + name + "/ cmsc621@" + replica + ":/home/cmsc621/Desktop/" + public_files + "/" + name + "/")
 
                 # Modifying an existing file
                 else:
@@ -114,7 +114,7 @@ def files_index():
                     # If this is the original node, send file to replication nodes
                     else:
                         for replica in session['replicas']:
-                            os.system("sshpass -p 12345 rsync -r " + public_files + "/ cmsc621@" + replica + ":/home/cmsc621/Desktop/" + public_files + "/" + name)
+                            os.system("sshpass -p 12345 rsync -r " + public_files + "/" + name + "/ cmsc621@" + replica + ":/home/cmsc621/Desktop/" + public_files + "/" + name + "/")
     # List the files that are in the public directory on the web page
     to_list = []
     directories = os.listdir(public_files)
@@ -130,11 +130,31 @@ def files_index():
 def down():
     # Placeholder for receiving new primary nodes for users
     if request.method == 'POST':
-        return 0
-    users.append(getip())
-    data = users
+        data2 = request.json
+        for user in os.listdir("/home/cmsc621/Desktop/files/"):
+            print(user)
+            for file in os.listdir("/home/cmsc621/Desktop/files/"+user):
+                print(file)
+                ip = getip()
+                version = open("/home/cmsc621/Desktop/files/" + user + "/" + file + "/.version", "r").read()
+                edit = version.split('\n')
+                print(edit)
+                if edit[1] == ip:
+                    for primaryuser in data2:
+                        if primaryuser["username"] == user:
+                            edit[1] = primaryuser["primary"]
+                            print(edit)
+                            os.system("echo \"" + edit[0] + "\n" + edit[1] + "\n" + edit[2] + "\" > " + "/home/cmsc621/Desktop/files/" + user + "/" + file + "/.version")
+                            for replica in primaryuser["replicas"]:
+                                os.system("sshpass -p 12345 rsync -r " + "/home/cmsc621/Desktop/files/" + user + "/" + file + "/ cmsc621@" + replica + ":/home/cmsc621/Desktop/files/" + user + "/" + file + "/")
+                            break
+                    print("BEANS")
+        # exit()
+        return render_template('index.html')
+    data = [users, getip()]
     # Request users' new primary nodes
     requests.post('http://' + master + ':25565/resolvedown', json=data)
+    return render_template('index.html')
 
 if __name__ == "__main__":
     # Establish presence in master server's list of nodes
