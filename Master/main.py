@@ -39,9 +39,9 @@ def index():
                     sessionavg[i] = avg
                     x += 1
 
+                sessionavg = dict(sorted(sessionavg.items(), key=lambda item: item[1]))
                 if username not in os.listdir('users/'):
-                    os.system("touch users/" + username + " && echo \"" + str(
-                        list(sessionavg.keys())) + "\" > users/" + username)
+                    os.system("touch users/" + username + " && echo \"" + str(list(sessionavg.keys())) + "\" > users/" + username)
                 else:
                     file = open("users/" + username, "r").read()
                     print(file)
@@ -50,6 +50,8 @@ def index():
                         if i not in rep:
                             rep.append(i)
                     os.system("echo \"" + str(rep) + "\" > users/" + username)
+                print(dict(sorted(sessionavg.items(), key=lambda x: x[1])))
+                print(sessionavg)
                 primary = min(zip(sessionavg.values(), sessionavg.keys()))[1]
                 sessionavg.pop(primary)
                 replicas = list(sessionavg.keys())
@@ -72,8 +74,10 @@ def resolvedown():
         print("Down request")
         # Get the post request from the downed server
         data = request.json
+        # print(data)
         # Get IP of downed server
         downednode = data[1]
+        print(downednode)
         os.system("rm -f nodes/" + downednode)
 
         # Store all users with new primary replica in global array (threading can't return values)
@@ -81,23 +85,42 @@ def resolvedown():
         resultsarray = []
 
         # Remove downed node from client replica list
-        threadarray = []
+        # threadarray = []
         for user in os.listdir('users'):
-            file = open("users/" + user, "r").read()
-            print(file)
+            openfile = open("users/" + user, "r")
+            file = openfile.read()
+            openfile.close()
+            # print(file)
             rep = list(json.loads(file.replace('\'', '"')))
             if downednode in rep:
                 rep.remove(downednode)
                 os.system("echo \"" + str(rep) + "\" > users/" + user)
-                print(type(user))
-                threadarray.append(threading.Thread(target=find_new_server, args=(user,)))
+                # print(type(user))
+                # threadarray.append(threading.Thread(target=find_new_server, args=(user,)))
+            openfile = open("users/" + user, "r")
+            file = openfile.read()
+            openfile.close()
+            usernodes = list(json.loads(file.replace('\'', '"')))
+            print(user, usernodes)
+            # If the user has any remaining servers in their array
+            if usernodes:
+                # If the user is currently in a session, change the primary server
+                if session:
+                    session["primary"] = usernodes[0]
+                    # If the user has more than one server listed in their array
+                    if usernodes[1]:
+                        session["replicas"] = usernodes[1:]
+                # Prepare data to send to down server
+                resultsarray.append({"username": user, "primary": usernodes[0], "replicas": usernodes})
+
 
         # See who exists in downed node to get ready to transfer user files to new primary servers
-        print("Getting Results...")
-        for thread in threadarray:
-            thread.start()
-            thread.join()
+        # print("Getting Results...")
+        # for thread in threadarray:
+        #     thread.start()
+        #     thread.join()
         print(resultsarray)
+        requests.post('http://' + downednode + ':25565/down', json=resultsarray)
     return render_template("index.html")
 
 
