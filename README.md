@@ -1,1 +1,2 @@
 # CMSC621
+To set up a storage node VM, you need to place `storage_node.py` in the `Desktop` of the system. Your user needs to be called `cmsc621` and the password needs to be `12345`. On the desktop, you also need directories `files`, `deleted`, `quarantine`, and `templates` (this on is for the web pages for nodes). You also need to go into /etc/ssh/ssh_config and uncomment `StrictHostKeyChecking` and set its value to `no`.
