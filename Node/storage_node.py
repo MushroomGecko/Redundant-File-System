@@ -73,12 +73,24 @@ def files_index():
 
     print(session['ip'], session['username'], session['replicas'])
     if request.method == "POST":
-        # File Download (Read)
+
         filesdown = request.form.getlist('filesdown')
-        if filesdown:
+        if request.form.get("delete_button"):
+            print("delete")
+        if request.form.get("download_button"):
+            print("download")
+
+        # File Download (Read)
+        if filesdown and request.form.get("download_button"):
             print(filesdown)
             for i in filesdown:
                 return send_file(public_files + "/" + i + "/" + i, as_attachment=True)
+
+        # File Deletion
+        if filesdown and request.form.get("delete_button"):
+            for i in os.listdir(public_files):
+                if i in filesdown:
+                    os.system("mkdir deleted/" + session['username'] + "; mv " + public_files + "/" + i + " deleted/" + session['username'] + "/" + i)
 
         # File Upload (Write/Append)
         filesup = request.files.getlist('filesup')
@@ -158,5 +170,5 @@ def down():
 
 if __name__ == "__main__":
     # Establish presence in master server's list of nodes
-    # os.popen("sshpass -p 12345 ssh cmsc621@" + master + " touch /home/cmsc621/Desktop/" + getip()).read()
+    os.popen("sshpass -p 12345 ssh cmsc621@" + master + " touch /home/cmsc621/Desktop/nodes/" + getip()).read()
     app.run(debug=True, host="0.0.0.0", port=25565, threaded=True)
