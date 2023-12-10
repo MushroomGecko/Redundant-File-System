@@ -16,7 +16,7 @@ sock = Sock(app)
 # List of active users
 users = []
 # IP of the master server
-master = "192.168.1.3"
+master = "192.168.1.2"
 
 # Self explainitory. Server gets the IP of itself
 def getip():
@@ -166,6 +166,16 @@ def down():
     data = [users, getip()]
     # Request users' new primary nodes
     requests.post('http://' + master + ':25565/resolvedown', json=data)
+    return render_template('index.html')
+
+@app.route('/newmaster', methods=['GET', 'POST'])
+def newmaster():
+    if request.method == 'POST':
+        print("new master")
+        global master
+        print(master)
+        master = str(request.data.decode('utf-8'))
+        print(master)
     return render_template('index.html')
 
 if __name__ == "__main__":
