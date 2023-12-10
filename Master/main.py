@@ -16,6 +16,17 @@ sock = Sock(app)
 
 resultsarray = []
 
+def getip():
+    ip = os.popen("ip a").read().split('\n')
+    for i in ip:
+        i = i.strip()
+        if "inet" in i:
+            if "127.0.0.1" in i or "::" in i:
+                continue
+            else:
+                return i.split(" ")[1].split("/")[0]
+    return 0
+
 @app.route('/', methods=['GET', 'POST'])
 def index():
     nodes = os.listdir('nodes/')
@@ -156,6 +167,25 @@ def find_new_server(user):
         session['replicas'] = replicas
     # Add user stuff to results array
     resultsarray.append([user, primary])
+
+@app.route('/down', methods=['GET', 'POST'])
+def down():
+    first = True
+    for i in os.listdir('masters/'):
+        ping = os.popen("ping -c 1 -w 1 " + str(i)).read()
+        print(ping, i, getip())
+        # Copy data to all shadow masters upon shutdown
+        if "100% packet loss" not in ping and i != getip():
+            os.system("sshpass -p 12345 rsync -r nodes/ cmsc621@" + str(i) + ":/home/cmsc621/Desktop/nodes &&" +
+                      "sshpass -p 12345 rsync -r masters/ cmsc621@" + str(i) + ":/home/cmsc621/Desktop/masters &&" +
+                      "sshpass -p 12345 rsync -r users/ cmsc621@" + str(i) + ":/home/cmsc621/Desktop/users")
+            if first:
+                # Tell nodes that a shadow master is now the new master
+                for j in os.listdir('nodes'):
+                    requests.post('http://' + j + ':25565/newmaster', data=i)
+                first = False
+    return render_template("index.html")
+
 
 
 if __name__ == "__main__":
