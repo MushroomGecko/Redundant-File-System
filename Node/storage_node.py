@@ -6,6 +6,7 @@ import socket
 import json
 from werkzeug.utils import secure_filename
 import requests
+from replication import create_replication_thread
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "quarantine/"
@@ -60,6 +61,11 @@ def index():
     # If user does not have a session in this node, redirect back to master.
     return redirect('http://' + master + ':25565')
 
+def gen_version_string():
+    base_list = [session['username'], getip() + ' 1']
+    for replica in session['replicas']:
+        base_list.append(replica + ' 0')
+    return "\n".join(base_list)
 
 @app.route('/files', methods=['GET', 'POST'])
 def files_index():
@@ -109,7 +115,7 @@ def files_index():
                         "rsync " + app.config['UPLOAD_FOLDER'] + "/" + name + " " + public_files + "/" + name + "/" + name +
                         " && rm -f " + app.config['UPLOAD_FOLDER'] + "/" + name +
                         " && touch " + public_files + "/" + name + "/.version" +
-                        " && echo \"" + session['username'] + "\n" + getip() + "\n1\" > " + public_files + "/" + name + "/.version")
+                        " && echo \"" + gen_version_string() + "\" > " + public_files + "/" + name + "/.version")
                     for replica in session['replicas']:
                         os.system("sshpass -p 12345 rsync -r " + public_files + "/" + name + "/ cmsc621@" + replica + ":/home/cmsc621/Desktop/" + public_files + "/" + name + "/")
 
@@ -171,4 +177,5 @@ def down():
 if __name__ == "__main__":
     # Establish presence in master server's list of nodes
     os.popen("sshpass -p 12345 ssh cmsc621@" + master + " touch /home/cmsc621/Desktop/nodes/" + getip()).read()
+    create_replication_thread(getip, app)
     app.run(debug=True, host="0.0.0.0", port=25565, threaded=True)
