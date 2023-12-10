@@ -7,6 +7,7 @@ import os
 import subprocess
 import socket
 import threading
+import random
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = "files/"
@@ -40,11 +41,18 @@ def index():
                 print("here")
                 sessionavg = {}
                 # Find session node with the lowest ping
+                chosen = []
                 x = 1
                 for i in nodes:
                     if x > 5:
                         break
-                    ping = os.popen("sshpass -p 12345 ssh cmsc621@" + i + " ping -c 1 " + str(session['ip'])).read()
+                    node = random.randrange(0, len(nodes))
+                    print(node)
+                    print(len(nodes)-1)
+                    while node in chosen:
+                        node = random.randrange(0, len(nodes))
+                    chosen.append(node)
+                    ping = os.popen("sshpass -p 12345 ssh cmsc621@" + nodes[node] + " ping -c 1 " + str(session['ip'])).read()
                     print(ping)
                     avg = str(ping.split("rtt")[1]).split()[2].split("/")[1]
                     sessionavg[i] = avg
