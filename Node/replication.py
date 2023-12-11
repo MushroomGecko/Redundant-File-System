@@ -15,8 +15,6 @@ SLEEP_TIME = 2 # Sync loop frequency (i.e. additional wait time before attemptin
 SLEEP_TIME_RAND = 0.3 # Additional random amount added to prevent repeated concurrent sync timing conflicts
 syncing_files = []
 sync_data = {}
-getip = None
-app = None
 
 """
 Structure of data:
@@ -34,11 +32,9 @@ sync_thread = None
 
 def create_replication_thread(ip_func, application):
     global getip
-    global app
     global sync_thread
 
     getip = ip_func
-    app = application
     sync_thread = threading.Thread(target=trigger_sync)
     sync_thread.start()
     atexit.register(close_replication_thread)
@@ -60,13 +56,14 @@ def overwrite_version(filepath: str, new_versions: dict):
 
     # Update versions. If any replicas changed, the sync thread will fix them on the next sync iteration.
     with open(filepath, 'w') as local_file:
-        for line in orig_lines:
+        for line in enumerate(orig_lines):
             version_pair = line.split(' ')
-            if version_pair[0] in new_versions:
-                version_pair[1] = new_versions[version_pair[0]]
+            if len(version_pair) > 1:
+                if version_pair[0] in new_versions:
+                    version_pair[1] = new_versions[version_pair[0]]
             local_file.writeline(line)
 
-def get_curr_version(filepath: str) -> dict:
+def get_curr_version(filepath: str, return_primary: bool = False) -> dict:
     versions = {ip: 0 for ip in ([getip()] + list(sync_data.keys))}
     if not os.path.exists(filepath):
         return None
@@ -75,9 +72,11 @@ def get_curr_version(filepath: str) -> dict:
             versions['conflict'] = True
 
         with open(filepath, 'r') as filereader:
-            for line in filereader:
+            for i, line in enumerate(filereader):
                 version_pair = line.split(' ')
-                if version_pair[0] in versions:
+                if i == 1 and return_primary:
+                    versions['primary'] = version_pair[0]
+                elif len(version_pair) > 1 and version_pair[0] in versions:
                     versions[version_pair[0]] = version_pair[1]
 
 def send_version(ip: str, filepath: str):
@@ -100,7 +99,7 @@ def sync_version(filepath):
 
         with open(filepath, 'r') as local_file:
             for i, line in enumerate(local_file):
-                if i == 0:
+                if i <= 1:
                     continue
 
                 version_pair = line.split(' ')
@@ -164,12 +163,13 @@ def trigger_sync():
 
     while thread_active:
         # Update sync timing data
-        for ip in list(sync_data):
-            if ip not in session['replicas']:
-                del sync_data[ip]
-        for ip in session['replicas']:
-            if ip not in sync_data:
-                sync_data[ip] = 0
+        with app.app_context():
+            for ip in list(sync_data):
+                if ip not in session['replicas']:
+                    del sync_data[ip]
+            for ip in session['replicas']:
+                if ip not in sync_data:
+                    sync_data[ip] = 0
 
         # Sync with the server that has not synced with for the longest time first
         sync_queue = sorted(sync_data, key=sync_data.get)
@@ -184,10 +184,11 @@ def trigger_sync():
                     versionpath = 'files/' + user + '/' + file + '/.version'
 
                     # Get the current file version vector
-                    orig_versions = get_curr_version(versionpath)
+                    orig_versions = get_curr_version(versionpath, True)
                     if orig_versions is None:
                         continue
-
+                    primary = orig_versions['primary']
+                    del orig_versions['primary']
                     local_versions = orig_versions.copy()
 
                     sync_versions(ip, filepath, versionpath, local_versions)
@@ -201,9 +202,10 @@ def trigger_sync():
                         elif os.path.exists(os.path.dirname(versionpath) + '/.conflict'):
                             os.remove(os.path.dirname(versionpath) + '/.conflict')
 
+                        del local_versions['conflict']
                         with open(versionpath, 'w') as filewriter:
-                            filewriter.writelines([user])
-                            filewriter.writelines([ip + ' ' + version for ip, version in local_versions.items() if ip != 'conflict'])
+                            filewriter.writelines([user, primary])
+                            filewriter.writelines([ip + ' ' + version for ip, version in local_versions.items()])
 
         time.sleep(SLEEP_TIME + random() * SLEEP_TIME_RAND)
 
