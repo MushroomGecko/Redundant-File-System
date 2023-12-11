@@ -353,7 +353,6 @@ def trigger_sync():
     # Wait until the app is active
 
     while thread_active:
-        print(thread_active)
         for user in os.listdir('files/'):
             for file in os.listdir('files/' + user):
                 filepath = 'files/' + user + '/' + file + '/' + file
