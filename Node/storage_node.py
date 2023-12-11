@@ -4,6 +4,7 @@ import os
 import subprocess
 import socket
 import json
+import signal
 from werkzeug.utils import secure_filename
 import requests
 
@@ -16,7 +17,7 @@ sock = Sock(app)
 # List of active users
 users = []
 # IP of the master server
-master = "192.168.1.2"
+master = "192.168.1.167"
 
 # Self explainitory. Server gets the IP of itself
 def getip():
@@ -157,22 +158,23 @@ def down():
             for file in os.listdir("/home/cmsc621/Desktop/files/"+user):
                 print(file)
                 ip = getip()
-                with open("/home/cmsc621/Desktop/files/" + user + "/" + file + "/.version", "r") as file:
-                    version = file.readlines()
+                with open("/home/cmsc621/Desktop/files/" + user + "/" + file + "/.version", "r") as filereader:
+                    version = [line.strip() for line in filereader.readlines()]
                 if version[1] == ip:
                     for primaryuser in data2:
                         if primaryuser["username"] == user:
                             version[1] = primaryuser["primary"]
                             print(version)
-                            os.system("echo \"" + ''.join(version) + "\" > " + "/home/cmsc621/Desktop/files/" + user + "/" + file + "/.version")
+                            os.system("echo \"" + '\n'.join(version) + "\" > " + "/home/cmsc621/Desktop/files/" + user + "/" + file + "/.version")
                             for replica in primaryuser["replicas"]:
                                 os.system("sshpass -p 12345 rsync -r " + "/home/cmsc621/Desktop/files/" + user + "/" + file + "/ cmsc621@" + replica + ":/home/cmsc621/Desktop/files/" + user + "/" + file + "/")
                             break
                     print("BEANS")
         # exit()
-        os.system('pkill python; pkill python3')
         # return render_template('index.html')
-        exit()
+        global thread_active
+        thread_active = False
+        os.kill(os.getpid(), signal.SIGINT)
     data = [users, getip()]
     # Request users' new primary nodes
     requests.post('http://' + master + ':25565/resolvedown', json=data)
@@ -201,7 +203,6 @@ SLEEP_TIME = 2 # Sync loop frequency (i.e. additional wait time before attemptin
 SLEEP_TIME_RAND = 0.3 # Additional random amount added to prevent repeated concurrent sync timing conflicts
 syncing_files = []
 sync_data = {}
-last_known_replicas = []
 
 """
 Structure of data:
@@ -228,6 +229,7 @@ def close_replication_thread():
     global thread_active
     global sync_thread
     thread_active = False
+    print('Waiting for thread to end...')
     sync_thread.join()
 
 def overwrite_version(filepath: str, new_versions: dict):
@@ -238,6 +240,8 @@ def overwrite_version(filepath: str, new_versions: dict):
     if 'conflict' in new_versions:
         with open(os.path.dirname(filepath) + '/.conflict', 'w'):
             pass
+    elif os.path.exists(os.path.dirname(filepath) + '/.conflict'):
+        os.remove(os.path.dirname(filepath) + '/.conflict')
 
     # Update versions. If any replicas changed, the sync thread will fix them on the next sync iteration.
     with open(filepath, 'w') as local_file:
@@ -348,11 +352,11 @@ def query_if_alive(ip: str) -> bool:
     return requests.get('http://' + ip + ':25565/sync/alive')
 
 def trigger_sync():
-    global thread_active
-    thread_active = True
-    # Wait until the app is active
+    while True:
+        global thread_active
+        if not thread_active:
+            break
 
-    while thread_active:
         for user in os.listdir('files/'):
             for file in os.listdir('files/' + user):
                 filepath = 'files/' + user + '/' + file + '/' + file
@@ -360,8 +364,6 @@ def trigger_sync():
 
                 # Get the current file version vector
                 orig_versions = get_curr_version(versionpath, True)
-                primary = orig_versions['primary']
-                del orig_versions['primary']
                 if orig_versions is None:
                     continue
 
@@ -406,6 +408,8 @@ def trigger_sync():
                 if finish_deletion:
                     shutil.rmtree('deleted/' + user + '/' + file)
 
+        if not thread_active:
+            break
         time.sleep(SLEEP_TIME + random() * SLEEP_TIME_RAND)
 
 def sync_versions(ip: str, filepath: str, versionpath: str, local_versions: dict) -> bool:
@@ -419,12 +423,10 @@ def sync_versions(ip: str, filepath: str, versionpath: str, local_versions: dict
         return
 
     syncing_files.append(filepath)
-    print('Syncing on', filepath)
 
     # if attempt sync succeeds, the other replica will update its syncing_files and sync_data
     if not attempt_sync_with(ip, filepath):
         syncing_files.remove(filepath)
-        print('Syncing off', filepath)
         return False
 
     sync_data[versionpath][ip] = time.time()
