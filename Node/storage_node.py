@@ -142,7 +142,7 @@ def files_index():
     for directory in directories:
         files = os.listdir(public_files + directory)
         for file in files:
-            if file != '.version':
+            if file != '.version' and file != '.conflict':
                 to_list.append(file)
     return render_template('files.html', to_list=to_list, user=session['username'])
 
